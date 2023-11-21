@@ -1,0 +1,18 @@
+# Mac
+.DS_Store
+
+# Editor
+.vscode
+.idea
+
+# Generic
+*.log
+*.backup
+*.local.sh
+*.local.yml
+*.local.yaml
+*.local.json
+*.local.txt
+
+# App
+filedrop
