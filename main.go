@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -13,6 +14,12 @@ import (
 	"os"
 	"path/filepath"
 )
+
+//go:embed upload.html
+var UPLOAD_HTML_FILE_CONTENT []byte
+
+//go:embed done.html
+var DONE_HTML_FILE_CONTENT []byte
 
 var FILEDROP_SMTP_HOST string
 var FILEDROP_SMTP_PORT string
@@ -53,16 +60,7 @@ func main() {
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		w.Write([]byte(`
-            <html>
-            <body>
-            <form enctype="multipart/form-data" action="/" method="post">
-                <input type="file" name="file" />
-                <input type="submit" value="Upload" />
-            </form>
-            </body>
-            </html>
-        `))
+		w.Write(UPLOAD_HTML_FILE_CONTENT)
 	} else if r.Method == "POST" {
 		// Parse the multipart form
 		if err := r.ParseMultipartForm(10 << 20); err != nil {
@@ -91,7 +89,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		fmt.Fprintf(w, "File uploaded and sent successfully")
+		w.Write(DONE_HTML_FILE_CONTENT)
 	}
 }
 
