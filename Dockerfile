@@ -1,6 +1,8 @@
 FROM golang:1.21 as build
 WORKDIR /build
-COPY go.mod main.go ./
+COPY go.mod go.sum ./
+RUN go mod download
+COPY main.go ./
 COPY upload.html done.html ./
 ENV CGO_ENABLED=0
 RUN go build

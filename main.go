@@ -3,16 +3,13 @@ package main
 import (
 	"bytes"
 	_ "embed"
-	"encoding/base64"
-	"fmt"
 	"io"
 	"log"
-	"mime/multipart"
 	"net/http"
-	"net/smtp"
-	"net/textproto"
 	"os"
-	"path/filepath"
+	"strconv"
+
+	"github.com/sikalabs/go-utils/pkg/mail"
 )
 
 //go:embed upload.html
@@ -22,20 +19,25 @@ var UPLOAD_HTML_FILE_CONTENT []byte
 var DONE_HTML_FILE_CONTENT []byte
 
 var FILEDROP_SMTP_HOST string
-var FILEDROP_SMTP_PORT string
+var FILEDROP_SMTP_PORT int
 var FILEDROP_EMAIL_FROM string
 var FILEDROP_SMTP_USERNAME string
 var FILEDROP_SMTP_PASSWORD string
 var FILEDROP_EMAIL_TO string
 
 func main() {
+	var err error
 	FILEDROP_SMTP_HOST = os.Getenv("FILEDROP_SMTP_HOST")
 	if FILEDROP_SMTP_HOST == "" {
 		log.Fatal("FILEDROP_SMTP_HOST is not set")
 	}
-	FILEDROP_SMTP_PORT = os.Getenv("FILEDROP_SMTP_PORT")
-	if FILEDROP_SMTP_PORT == "" {
+	FILEDROP_SMTP_PORT_ENV := os.Getenv("FILEDROP_SMTP_PORT")
+	if FILEDROP_SMTP_PORT_ENV == "" {
 		log.Fatal("FILEDROP_SMTP_PORT is not set")
+	}
+	FILEDROP_SMTP_PORT, err = strconv.Atoi(FILEDROP_SMTP_PORT_ENV)
+	if err != nil {
+		log.Fatal("FILEDROP_SMTP_PORT is not a number")
 	}
 	FILEDROP_EMAIL_FROM = os.Getenv("FILEDROP_EMAIL_FROM")
 	if FILEDROP_EMAIL_FROM == "" {
@@ -84,44 +86,23 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		fileData := buf.Bytes()
 
 		// Send email with the file
-		if err := sendEmailWithAttachment(fileData, header.Filename); err != nil {
+		err = mail.SendEmailWithAttachment(
+			FILEDROP_SMTP_HOST,
+			FILEDROP_SMTP_PORT,
+			FILEDROP_SMTP_USERNAME,
+			FILEDROP_SMTP_PASSWORD,
+			FILEDROP_EMAIL_FROM,
+			FILEDROP_EMAIL_TO,
+			"[filedrop] "+header.Filename,
+			"", // No body
+			header.Filename,
+			fileData,
+		)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		w.Write(DONE_HTML_FILE_CONTENT)
 	}
-}
-
-func sendEmailWithAttachment(fileData []byte, filename string) error {
-	// Set up authentication information.
-	auth := smtp.PlainAuth("", FILEDROP_SMTP_USERNAME, FILEDROP_SMTP_PASSWORD, FILEDROP_SMTP_HOST)
-
-	// Create a new email
-	body := new(bytes.Buffer)
-
-	writer := multipart.NewWriter(body)
-
-	part, err := writer.CreatePart(textproto.MIMEHeader{
-		"Content-Type":              []string{"application/octet-stream"},
-		"Content-Transfer-Encoding": []string{"base64"},
-		"Content-Disposition":       []string{fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(filename))},
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	// Write the encoded file to the part
-	part.Write([]byte(base64.StdEncoding.EncodeToString(fileData)))
-
-	subject := "[filedrop] " + filename
-
-	// Send the email
-	message := []byte("To: " + FILEDROP_EMAIL_TO + "\r\n" +
-		"From: " + FILEDROP_EMAIL_FROM + "\r\n" +
-		"Subject: " + subject + "\r\n")
-	message = append(message, []byte(fmt.Sprintf("Content-Type: multipart/mixed; boundary=%s\n\n", writer.Boundary()))...)
-	message = append(message, body.Bytes()...)
-
-	return smtp.SendMail(FILEDROP_SMTP_HOST+":"+FILEDROP_SMTP_PORT, auth, FILEDROP_EMAIL_FROM, []string{FILEDROP_EMAIL_TO}, message)
 }
